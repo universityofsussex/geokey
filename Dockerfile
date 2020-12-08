@@ -19,11 +19,9 @@ RUN gdal-config --version \
     && export C_INCLUDE_PATH=/usr/include/gdal \
     && export CPLUS_INCLUDE_PATH=/usr/include/gdal \
 		&& pip install wheel \
-		#&& pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels install gdal==2.4.0 --global-option=build_ext --global-option="-I/usr/include/gdal/" \
 		&& pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels install gdal==2.4.0 \
 		&& pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt \
 		&& pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels install gunicorn \
-		&& pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels install regex \
 		&& pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels install -e .
 
 ##########
@@ -32,19 +30,21 @@ RUN gdal-config --version \
 FROM debian:buster-slim 
 ENV HOME=/home/django-data \
 		DEBIAN_FRONTEND="noninteractive" \
-		PACKAGES_FINAL="python2 python-setuptools python-pip nodejs python-gdal"
+		PACKAGES_FINAL="python2 python-setuptools python-pip nodejs "
 RUN groupadd -r --gid 295 django-data \ 
 		&& adduser --home $HOME --disabled-password --uid 295 --gid 295 --gecos "" django-data 
 WORKDIR $HOME
 COPY --from=build /usr/src/app .
-COPY docker_settings.py  memorymap_toolkit/settings/secret_settings.py
+COPY docker_settings.py  local_settings.example/settings.py
 RUN apt-get -y update \
 		&& apt-get install --no-install-recommends -y $PACKAGES_FINAL \
 		&& apt-get clean autoclean \
 		&& apt-get autoremove --yes \
 		&& rm -rf /var/lib/{apt,dpkg,cache,log}/ \
-		&& pip install --no-cache --upgrade pip \
-		&& pip install --no-cache $HOME/wheels/* \
+    && mv local_settings.example local_settings \
+		&& pip install --no-deps --no-cache --upgrade pip \
+		&& pip install --no-deps --no-cache $HOME/wheels/* \
 		&& rm -rf wheels \
-CMD /usr/bin/sh; sleep infinity
-#CMD /usr/bin/python2 manage.py collectstatic --settings=memorymap_toolkit.settings.local ; /usr/local/bin/gunicorn  --workers=2 --threads=4 --worker-class=gthread --log-file=- -b 0.0.0.0:8000  memorymap_toolkit.wsgi
+    && chown django-data:django-data . -R
+USER 295
+CMD /usr/bin/python2 manage.py collectstatic ; /usr/local/bin/gunicorn  --workers=2 --threads=4 --worker-class=gthread --log-file=- -b 0.0.0.0:8000  
